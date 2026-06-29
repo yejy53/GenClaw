@@ -1,0 +1,49 @@
+name: code_scene_draft
+description: Code-draw an SVG draft to lock precise multi-object geometry (count, colour, position). Output is a draft PNG; you can refine it to photoreal with i2i.
+what: 'Use an LLM to generate an SVG that captures exact object counts,
+
+  colours, and spatial layout, on a canvas size the model picks to fit the
+
+  scene. Render the SVG to PNG via playwright. Optionally self-review (a VLM
+
+  scrutinises the rendering and can revise up to 3 rounds).
+
+
+  The output is a CARTOON-style draft PNG plus a structured layout JSON
+
+  (svg_description). The draft is meant to be upgraded to photoreal by i2i.
+
+  '
+when_to_use: 'Examples of tasks this fits well (illustrative, not strict triggers):
+
+  - Explicit object count: "3 red apples 2 blue cups"
+
+  - Per-object specific colour: "left red car right blue car"
+
+  - Explicit spatial position: "cat on left, dog on right", "2x3 grid"
+
+  - Multiple distinct objects + attributes: "big red ball, small blue cube, medium green cylinder on a table"
+
+  - Many enumerated objects, each must stay recognisable
+
+  - Relative size constraint: "elephant beside a tiny mouse"
+
+  '
+when_not_to_use: 'Suggestions for when another tool is usually a better fit:
+
+  - Natural scene / atmosphere ("sunset over the sea") — t2i is usually simpler.
+
+  - Single subject, no count/position constraint ("an old fisherman") — consider t2i.
+
+  - Long text inside the image (menu, scoreboard) — consider code_text_draft.
+
+  - Modifying an existing image — consider i2i.
+
+  - Highly abstract / surreal style — SVG cannot capture style detail well.
+
+  '
+usage: "Required:\n  prompt: str — what to draft, including all object/colour/position constraints\n\nOptional:\n  self_review: bool (default True)\n    → VLM self-review + up to 3 revise rounds.\n      Costs extra time. Set false to skip for speed at the risk of\n      miscount / misposition.\n\nOutput (JSON):\n  draft_png_path: str (absolute) — feed into i2i.image_path to go photoreal\n  svg_description: str — layout JSON (high_level_description / style_description /\n    compositional_deconstruction); good as an i2i / format_prompt caption\n  review_verdict: 'PASS'|'OPTIMIZE'|'FAIL'|'SKIPPED'\n  review_passed: bool\n"
+failure_modes:
+- status=failed with empty draft_png_path → the SVG-generation LLM produced invalid SVG or playwright failed to render. Check meta.json review_feedback; try self_review=false to bypass the review loop.
+- review_verdict=FAIL after 3 rounds → SVG is structurally valid but misses a prompt constraint (e.g. count off by one). The draft is still produced; i2i may correct it.
+- 'draft looks cartoon-y but you wanted photoreal → that is by design. Chain i2i to upgrade: i2i({image_path: draft_png_path, prompt: "photorealistic ..."}).'

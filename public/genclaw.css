@@ -1,0 +1,131 @@
+.welcome-screen > img.logo {
+  display: none !important;
+}
+
+.welcome-screen::before {
+  content: "GenClaw";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  margin-bottom: 8px;
+  padding-left: 78px;
+  background-image: url("/logo?theme=dark&v=genclaw-20260616-2");
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: 60px 60px;
+  color: #25154f;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.dark .welcome-screen::before {
+  background-image: url("/logo?theme=light&v=genclaw-20260616-2");
+  color: #f8fafc;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.10), transparent 28rem),
+    radial-gradient(circle at top right, rgba(244, 114, 182, 0.10), transparent 26rem),
+    #fbfcff !important;
+}
+
+.welcome-screen > .bg-accent,
+.welcome-screen > .dark\:bg-card {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(37, 21, 79, 0.12) !important;
+  box-shadow: 0 16px 45px rgba(37, 21, 79, 0.10), 0 2px 10px rgba(37, 21, 79, 0.06) !important;
+}
+
+#chat-input {
+  color: #1f2937 !important;
+}
+
+#chat-input::before {
+  color: #6b7280 !important;
+}
+
+[data-step],
+[data-testid*="step"],
+[data-testid*="message"],
+.message,
+.step {
+  border-color: rgba(37, 21, 79, 0.10) !important;
+}
+
+.prose,
+.markdown-body {
+  color: #1f2937;
+}
+
+.dark body {
+  background: #0f172a !important;
+}
+
+a[href*="chainlit"],
+[class*="watermark"],
+[class*="branding"],
+footer {
+  display: none !important;
+}
+
+button[aria-label*="copy" i],
+button[title*="copy" i],
+[data-testid*="copy" i],
+[class*="copyButton" i],
+[class*="copy-button" i],
+.genclaw-hide-copy {
+  display: none !important;
+}
+
+[data-testid*="step"],
+.step {
+  background: rgba(255, 255, 255, 0.86) !important;
+  border: 1px solid rgba(37, 21, 79, 0.10) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(37, 21, 79, 0.06) !important;
+}
+
+.genclaw-vlm-review {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.genclaw-vlm-review .review-card {
+  border: 1px solid rgba(37, 21, 79, 0.10);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.genclaw-vlm-review .review-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.genclaw-vlm-review .review-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: rgba(37, 21, 79, 0.07);
+  color: #25154f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .genclaw-vlm-review {
+    grid-template-columns: 1fr;
+  }
+}

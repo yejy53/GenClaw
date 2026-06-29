@@ -1,0 +1,41 @@
+# CC-GenClaw config. Copy to config.yaml and fill in your keys.
+# config.yaml is gitignored — keep real keys out of version control.
+#
+# Design: ONE OpenAI-compatible gateway serves every model. Set the endpoint
+# (base_url + api_key) once, then you only choose a MODEL NAME per role.
+# Any OpenAI-compatible gateway works (OpenAI, OpenRouter, a self-hosted
+# proxy, etc.) as long as it exposes the chat + image models you name below.
+
+# --- the single gateway: set these two once ---------------------------------
+OPENAI_BASE_URL: "https://your-openai-compatible-gateway/v1"
+OPENAI_API_KEY: ""
+
+# --- model names (the only thing you normally change) -----------------------
+# Main agent planner + all sub-LLMs.
+OPENAI_MODEL_NAME: "gpt-5.5"
+
+# Image generation / editing (t2i + i2i). A Gemini image model served over the
+# same gateway. No extra url/key needed — it reuses OPENAI_BASE_URL/API_KEY.
+CC_GENCLAW_IMAGE_PROVIDER: "gemini_openai"
+GEMINI_I2I_MODEL_NAME: "gemini-3.1-flash-image-preview"
+
+# --- search (only needed for world-knowledge / lookup tasks) ----------------
+TAVILY_API_KEY: ""
+
+# ============================================================================
+# Optional — uncomment only if you need it.
+# ============================================================================
+#
+# Use a SEPARATE model for code drafting (SVG/HTML). Off by default, so code
+# tools reuse OPENAI_MODEL_NAME above.
+# CODE_LLM_ENABLED: "true"
+# CODE_LLM_MODEL_NAME: "gpt-5.5"
+#
+# Point the image model at a DIFFERENT endpoint than the main gateway.
+# GEMINI_BASE_URL: ""
+# GEMINI_API_KEY: ""
+#
+# Outbound proxy (off by default).
+# proxy_on: true
+# HTTP_PROXY: "http://127.0.0.1:7890"
+# HTTPS_PROXY: "http://127.0.0.1:7890"

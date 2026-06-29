@@ -1,0 +1,221 @@
+name: format_prompt
+description: "Compose the current trajectory brief into one final t2i/i2i prompt, preserving original intent, facts, reasoning, layout, text-template constraints, and reference bindings."
+
+what: |
+  A trajectory-to-generation prompt composer. It takes image-relevant state
+  accumulated by the main agent and produces a single direct final_prompt for
+  the next t2i or i2i call.
+
+  It does NOT search, solve new reasoning, generate images, choose a pipeline,
+  or pick the best reference image. It privately audits the provided fields,
+  then returns strict JSON with final_prompt plus reference binding metadata.
+
+when_to_use: |
+  Call after one or more upstream tools produced information that must be
+  fused before the final image call:
+  - search produced a concise search_facts_summary or reference_image_paths
+  - search returned multiple reference_image_paths, was called with multiple
+    image_queries, or the request contains multiple grounded visual entities
+    whose roles must be preserved. In these cases, prefer
+    `search → format_prompt → i2i` rather than direct `search → i2i`.
+  - reason produced reasoning_output that resolves a title, answer, subject,
+    event, geometry conclusion, or other non-direct visual content
+  - code_scene_draft produced svg_description / draft_png_path that should
+    guide i2i layout preservation
+  - code_text_draft produced a text_template_path / expected_texts_used that
+    must be restyled while keeping text exact. If its render_type is
+    embedded_svg, use format_prompt to turn the text/structure draft into a
+    natural final i2i prompt rather than rigidly preserving blueprint boxes.
+  - user_image_path / source_image_path is present and the final prompt must
+    say how to edit or preserve that image
+
+when_not_to_use: |
+  - Trivial direct image request with no upstream facts, reasoning, source
+    image, layout draft, text template, or references — go straight to t2i.
+  - Already called format_prompt and no trajectory field changed.
+  - User prompt is already a complete high-quality generation prompt and no
+    upstream state needs merging.
+  - You only want to choose or rerank reference images. search already returns
+    curated best-first reference_paths; format_prompt must not rerank, veto,
+    filter, or reorder them. This exception does NOT apply to multi-reference
+    binding: when several references should guide one i2i call, use
+    format_prompt to preserve their roles and pass them through.
+
+usage: |
+  Preferred args:
+    original_user_prompt: str — verbatim user request; primary intent anchor.
+    image_intent: str — perception's visual summary; clarification only.
+    search_facts_summary: str — concise visible facts from search. Do NOT pass
+      a long raw search dump; include only facts that affect the image.
+    reasoning_output: List[str] — copied from reason.reasoning_output.
+    reference_image_paths: List[str] — already curated and ordered by search.
+    svg_description: str — code_scene_draft.svg_description.
+    draft_png_path: str — code_scene_draft.draft_png_path when it is the i2i
+      source image.
+    text_template_path: str — code_text_draft.final_path when restyling an
+      already-rendered text image, or when using embedded_svg output as a
+      structural/text reference for a more natural i2i result.
+    expected_texts_used: List[str] — code_text_draft.expected_texts_used.
+    render_type: str — pass code_text_draft.render_type. If it is
+      "embedded_svg", the prompt should preserve exact texts and object
+      associations while naturalizing carrier scale, materials, perspective,
+      and proportions.
+    user_image_path / source_image_path: str — actual image path to edit or
+      preserve when the user image or a prior image is the i2i canvas.
+    target_tool: "t2i" | "i2i" — optional hint for the next image tool.
+
+  Backward-compatible args still accepted:
+    base_prompt, facts, reasoning, user_image_path, svg_description,
+    reference_image_paths.
+
+  Output (JSON):
+    final_prompt: str — refined prompt for t2i/i2i.
+    reference_paths: List[str] — reference_image_paths passthrough, same order.
+    reference_bindings: List[{path, role}] — how each provided image should
+      guide the downstream generator.
+    target_tool: "t2i" | "i2i".
+    i2i_image_path_hint: str — suggested main i2i image path, if any. This is
+      the editable canvas / main composition anchor, not necessarily the first
+      reference image. Downstream this becomes Reference A.
+    i2i_extra_reference_paths_hint: List[str] — suggested extra i2i refs.
+      Downstream these become Reference B/C/... .
+    rationale_summary: str — one short summary, not chain-of-thought.
+
+failure_modes:
+  - If the composer LLM fails, the tool falls back to a deterministic prompt
+    composed from original_user_prompt / image_intent / search_facts_summary /
+    reasoning_output / svg_description / text constraints.
+  - If reference_bindings are weak or missing, use reference_paths directly;
+    they remain ordered passthrough paths from upstream search.
+  - If i2i_image_path_hint is empty but target_tool is i2i, use a real path
+    from prior tool_result.content (e.g. search.reference_paths[0],
+    code_scene_draft.draft_png_path, code_text_draft.final_path, or
+    user_image_path). Never invent a path.
+
+cross_tool: |
+  - Usually followed by t2i or i2i.
+  - For search → format_prompt → i2i: pass a short search_facts_summary and
+    search.reference_paths. Then use i2i_image_path_hint as i2i.image_path,
+    and remaining refs as i2i.reference_image_paths. If the hint is empty,
+    fall back to reference_paths[0].
+  - For multi-reference search results, preserve every provided path in
+    reference_paths. Assign roles in reference_bindings when possible (main
+    subject, product/device, style, location, etc.). Prefer the editable canvas
+    / main composition anchor as i2i_image_path_hint and put identity-only,
+    costume-only, character-sheet, logo/detail, and highly cropped references
+    in i2i_extra_reference_paths_hint. For product scenes, the product or scene
+    reference is often the main canvas even when a character/IP reference was
+    searched first. The final_prompt should include a compact Reference A/B
+    role preface when references have different roles.
+  - For code_scene_draft → format_prompt → i2i: pass draft_png_path and
+    svg_description; i2i should use draft_png_path as image_path.
+  - For code_text_draft(pure_code/layered) → format_prompt → i2i: pass
+    text_template_path and expected_texts_used; i2i should use the text
+    template as image_path and preserve all readable text exactly.
+  - For code_text_draft(embedded_svg) → format_prompt → i2i: pass
+    text_template_path, expected_texts_used, render_type="embedded_svg", and
+    category. Treat the image as a structural/text reference, not a rigid
+    final template. i2i should preserve exact text strings and which object or
+    surface each belongs to, while making carrier size, perspective, materials,
+    and proportions natural and realistic. UI-like rectangles, bars, borders,
+    fills, and placeholder panels in the draft are only position/content
+    placeholders; map them into scene-native carriers such as paper/acrylic
+    museum plaques, storefront signs, invitation cards, handwritten notes,
+    sticky notes, speech bubbles, product tags, menu boards, chalkboards,
+    display-case labels, or printed cards. For signs and plaques, ask for real
+    physical construction and attachment: board thickness, frames, poles,
+    brackets, overhead gantries, wall mounts, bolts, screws, hanging wires,
+    tape, shadows, reflections, and perspective. Avoid floating rounded UI
+    cards or screen-overlay panels detached from the scene.
+  - For reason → format_prompt → t2i/i2i: pass reasoning_output, but also pass
+    original_user_prompt so the final prompt does not forget the requested
+    format, text, edit location, or visual goal.
+
+examples:
+  - |
+    <example>
+    Long text restyle after code_text_draft:
+      format_prompt({
+        "original_user_prompt": "Create a full Shakespeare sonnet poster on aged parchment; all text must be complete and readable.",
+        "image_intent": "Classical full-poem poster with exact readable text",
+        "text_template_path": "/abs/session/code_text_draft/final.png",
+        "expected_texts_used": ["<full sonnet text already rendered in the template image>"],
+        "target_tool": "i2i"
+      })
+    → final_prompt: "Restyle the provided text poster image into a classical
+      parchment poetry poster while preserving the existing rendered poem text
+      exactly as shown..."
+    <reasoning>
+    The long text is already rendered in the template image, so the final i2i
+    prompt should preserve it rather than repeat the entire poem.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    Reasoning resolved a required poem title:
+      format_prompt({
+        "original_user_prompt": "根据描述推理出一首关于蜀道艰险、山势高峻的古诗标题，并生成一张水墨风诗歌海报，海报中需要醒目呈现对应的诗歌标题。",
+        "image_intent": "水墨诗歌海报，需要包含推理出的诗歌标题文字",
+        "reasoning_output": ["The poem title is Li Bai's '蜀道难'."],
+        "target_tool": "t2i"
+      })
+    → final_prompt: "Design an ink-painting poetry poster featuring the title
+      text '蜀道难' prominently, with steep Shu mountain roads, towering cliffs,
+      mist, and Tang-style literary atmosphere..."
+    <reasoning>
+    Reasoning supplies the title, while the original prompt supplies the
+    requirement to generate a poster that visibly presents that title.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    Reasoning solved a math image edit:
+      format_prompt({
+        "original_user_prompt": "Solve the geometry multiple-choice problem in the image and fill the correct option into the answer box at the top right.",
+        "image_intent": "Edit the worksheet by filling the answer box",
+        "user_image_path": "/abs/user/math_problem.png",
+        "reasoning_output": ["The correct answer is option C."],
+        "target_tool": "i2i"
+      })
+    → final_prompt: "Edit the provided math problem image by writing the answer
+      option 'C' clearly inside the existing answer box at the top right..."
+    <reasoning>
+    The tool carries the answer from reason and the edit location from the
+    original prompt, while preserving the rest of the input image.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    SVG layout draft should be preserved:
+      format_prompt({
+        "original_user_prompt": "桌子中间三个红色苹果，左边两个绿色香蕉，右边一辆自行车，写实照片风格。",
+        "image_intent": "按草图布局生成写实桌面场景",
+        "draft_png_path": "/abs/session/code_scene_draft/draft.png",
+        "svg_description": "{\"high_level_description\":\"tabletop composition with 3 red apples centered, 2 green bananas on the left, and a bicycle on the right\"}",
+        "target_tool": "i2i"
+      })
+    → final_prompt: "Use the provided draft image as the structural layout
+      guide. Preserve exactly three red apples in the table center, two green
+      bananas on the left, and one bicycle on the right..."
+    <reasoning>
+    The draft image is not final art; format_prompt turns its layout JSON into
+    an i2i prompt that preserves counts and positions while improving realism.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    Multiple search queries produced multiple references:
+      format_prompt({
+        "original_user_prompt": "Draw a mascot figure interacting with a newly released product in a product-promo image.",
+        "image_intent": "Mascot figure plus accurate product design",
+        "search_facts_summary": "Use the first reference for the mascot identity; use the second reference for the product shape, materials, and visual details.",
+        "reference_image_paths": ["/abs/search/mascot_ref.png", "/abs/search/product_ref.png"],
+        "target_tool": "i2i"
+      })
+    → reference_bindings: first path controls mascot identity; second path
+      controls product shape, materials, and visible design details.
+    <reasoning>
+    format_prompt binds each already-curated image to a visual role, but does
+    not reorder or discard either reference path.
+    </reasoning>
+    </example>

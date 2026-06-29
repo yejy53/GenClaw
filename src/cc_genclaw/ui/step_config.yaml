@@ -1,0 +1,117 @@
+display:
+  default_style: plain
+
+tools:
+  perception:
+    display_name: perception
+    subtitle: Visual intent and planning hints
+    fields:
+      - painter_thoughts
+      - image_intent
+
+  todo_write:
+    display_name: todo_write
+    subtitle: Agent plan
+    fields:
+      - todos
+
+  code_scene_draft:
+    display_name: code_scene_draft
+    subtitle: Structural layout draft
+    fields: []
+    artifact_names:
+      - step2_draft.png
+      - final.svg
+      - final.png
+    artifact_roles:
+      - draft
+      - final
+    image_result_fields:
+      - draft_png_path
+
+  format_prompt:
+    display_name: format_prompt
+    subtitle: Prompt composition
+    fields:
+      - final_prompt
+      - rationale_summary
+
+  i2i:
+    display_name: i2i
+    subtitle: Final image generation
+    fields: []
+    image_result_fields:
+      - final_path
+
+  t2i:
+    display_name: t2i
+    subtitle: Text-to-image generation
+    fields: []
+    image_result_fields:
+      - final_path
+
+  image_gen:
+    display_name: image_gen
+    subtitle: Generation backend output
+    fields: []
+    image_result_fields:
+      - final_path
+
+  code_text_draft:
+    display_name: code_text_draft
+    subtitle: Exact text rendering
+    fields:
+      - render_type
+      - category
+      - expected_texts_used
+      - process_summary
+    artifact_names:
+      - background.png
+      - draft.png
+      - final.png
+    artifact_roles:
+      - background
+      - draft
+      - final
+    image_result_fields:
+      - final_path
+      - image_path
+
+  search:
+    display_name: search
+    subtitle: References and facts
+    fields:
+      - text_queries
+      - image_queries
+      - facts
+      - downloaded_count
+      - candidate_count
+      - ranking_log
+    artifact_roles:
+      - reference
+      - artifact
+    image_result_fields:
+      - reference_paths
+    max_images: 8
+    max_candidate_images: 8
+
+  reason:
+    display_name: reason
+    subtitle: Visual reasoning
+    fields:
+      - reasoning_output
+
+  vlm_review:
+    display_name: vlm_review
+    subtitle: Visual QA review
+    fields:
+      - criteria
+      - verdict
+      - passed
+      - issues
+      - suggested_fix_prompt
+
+defaults:
+  display_name: tool
+  subtitle: Agent tool call
+  fields: []

@@ -1,0 +1,36 @@
+name: i2i
+description: Generate a new image guided by an existing image and a prompt. Returns the absolute path of the generated PNG.
+
+what: |
+  Produce a new image from an existing image plus a text prompt — refine,
+  restyle, edit, or ground the result on the provided image(s).
+
+when_to_use: |
+  When there is already an image to build on and you want a new image
+  guided by it.
+
+when_not_to_use: |
+  When there is no source image yet — produce one from a text prompt
+  first, then refine it here.
+
+usage: |
+  Input:
+    image_path (string, required): ABSOLUTE path to an existing image file,
+      extracted from a previous tool_result. Not invented.
+    prompt (string, required): guidance for the result.
+    reference_image_paths (array of string, optional): extra reference
+      images; do NOT repeat image_path here.
+      The tool sends image_path first as Reference A / main canvas, then these
+      paths as Reference B/C/... secondary references. The prompt may include
+      a Reference A/B role preface; if not, the tool adds a generic ordering
+      preface before generation.
+    quality (string, optional): reserved, currently no effect.
+
+  Output (JSON in tool_result.content):
+    status: "success" | "failed"
+    final_path: absolute path to the generated PNG (on success)
+    error: error message (on failed)
+
+failure_modes:
+- image_path is missing, not absolute, or not an existing file → status=failed, error lists the legal sources of valid paths.
+- Provider API failed on all attempts (1 original + 3 retries, 5s/15s/45s backoff) → status=failed, error contains the underlying exception.

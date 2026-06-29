@@ -1,0 +1,25 @@
+[project]
+name = "cc-genclaw"
+version = "0.1.0"
+description = "An image-generation agent that plans a toolchain (perception -> code/scene draft -> i2i / search / reason) instead of one-shot prompting."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "playwright>=1.40.0",
+    "chainlit>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

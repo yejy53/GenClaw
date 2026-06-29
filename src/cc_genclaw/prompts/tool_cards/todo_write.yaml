@@ -1,0 +1,274 @@
+name: todo_write
+description: The image-generation agent's planning sub-agent — open every image task with it and keep it updated as you work. It is not a generic task-list habit; it is where the agent turns the user's image intent into a concrete generation pipeline (which tools to chain, what each returns, and how outputs feed the next step). At most one task may be in_progress at a time. Each task requires content (imperative) and status; activeForm (present continuous) is optional and reserved for a future progress UI.
+
+what: |
+  Use this tool to create and manage a structured task list for your current
+  session. This helps you track progress, organize complex tasks, and
+  demonstrate thoroughness to the user. It also helps the user understand the
+  progress of the task and overall progress of their requests.
+
+  For this image-generation agent, todo_write behaves like a lightweight
+  planning sub-agent: it reads the user's visual intent, optional perception
+  hints, and the available generation tools, then sketches the next concrete
+  image pipeline before execution. Treat perception output as helpful context,
+  not as the sole source of truth.
+
+when_to_use: |
+  In this agent, todo_write is the DEFAULT opening move for every task. Open
+  todo_write BEFORE the first generation tool, even for a single-step task
+  (use a one-item list). It is your planning anchor: encode the pipeline as
+  todos first, then execute and update.
+
+  Once the list exists, keep it honest:
+
+  1. Mark an item in_progress BEFORE you start that step (only ONE in_progress
+     at a time).
+  2. Mark it completed the moment it is done — do not batch completions.
+  3. Add follow-up items the moment you discover them mid-execution.
+  4. On the final step, flip the last item to completed in the SAME turn as
+     your final user-facing reply (last-step merge).
+
+when_not_to_use: |
+  In this agent, todo_write is the DEFAULT opening move for every task —
+  including single-step ones (use a one-item list). The only time to skip it
+  is when the turn is purely conversational or informational (there is no
+  task to carry out).
+
+  NOTE: this deliberately OVERRIDES the generic "skip trivial single tasks"
+  advice. In this project even a single t2i / i2i / code_text_draft call
+  opens with a one-item todo, so the user always sees the plan.
+
+usage: |
+  ## Task States and Management
+
+  1. **Task States**: Use these states to track progress:
+     - pending: Task not yet started
+     - in_progress: Currently working on (limit to ONE task at a time)
+     - completed: Task finished successfully
+
+     **IMPORTANT**: Each task is described by:
+     - content (required): The imperative form describing what needs to be done (e.g., "Run tests", "Build the project")
+     - activeForm (optional): The present continuous form (e.g., "Running tests", "Building the project"). Reserved for a future progress UI; you may omit it for now.
+
+  2. **Task Management**:
+     - Update task status in real-time as you work
+     - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+     - At most ONE task may be in_progress at a time (never two or more)
+     - Complete current tasks before starting new ones
+     - Remove tasks that are no longer relevant from the list entirely
+
+  3. **Task Completion Requirements**:
+     - ONLY mark a task as completed when you have FULLY accomplished it
+     - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
+     - When blocked, create a new task describing what needs to be resolved
+     - Never mark a task as completed if:
+       - Tests are failing
+       - Implementation is partial
+       - You encountered unresolved errors
+       - You couldn't find necessary files or dependencies
+
+  4. **Task Breakdown**:
+     - Create specific, actionable items
+     - Break complex tasks into smaller, manageable steps
+     - Use clear, descriptive task names
+     - Provide content (required); activeForm is optional:
+       - content: "Fix authentication bug"
+       - activeForm (optional): "Fixing authentication bug"
+
+  When in doubt, use this tool. Being proactive with task management
+  demonstrates attentiveness and ensures you complete all requirements
+  successfully.
+
+failure_modes:
+  - '"At most one task may be in_progress" — restructure the list so no more than one is currently in_progress; mark previous in_progress as completed if done, or as pending if you switched away'
+  - 'Missing content / status field — every item needs both (activeForm is optional)'
+  - 'Status outside {pending, in_progress, completed} — use exactly those three values'
+
+cross_tool: |
+  todo_write is the agent's PLANNING HUB. Its own schema references no other
+  tool, but this is where you compose the pipeline: pick the generation
+  tools, know what each returns, and thread one tool's output into the next.
+
+  ## Tool palette (what each does → what it RETURNS)
+  - `t2i` — text → image. Returns `final_path` (a generated PNG).
+  - `i2i` — edits/refines an input image. Takes `image_path` + `prompt`;
+    returns `final_path`.
+  - `code_scene_draft` — locks exact counts / positions as an SVG draft.
+    Returns `draft_png_path` (a cartoonish draft — NEVER a final image; it
+    MUST be refined by `i2i`).
+  - `code_text_draft` — renders verbatim long text (menus / signs / posters).
+    Returns `final_path`. The output is often already the final deliverable,
+    but that path may also be used as `i2i.image_path` when the user wants a
+    richer visual restyle while preserving the text template.
+  - `search` — grounds named / real-world / IP entities. Returns
+    `reference_paths[]` (curated refs) plus `facts`. Search returns source
+    information, not the final image prompt. Feed `reference_paths[0]` into
+    `i2i.image_path` when a visual anchor exists, and use `format_prompt` with
+    a concise search_facts_summary when facts / multiple refs / reasoning need
+    to be turned into a downstream `t2i` / `i2i` prompt.
+  - `reason` — pure derivation. There are no modes; ask the reasoning
+    question in `prompt`. Returns `reasoning_output` text only (no image).
+  - `format_prompt` — trajectory brief composer; turns the original user
+    prompt plus image_intent, concise search facts, reasoning conclusions,
+    layout drafts, text-template constraints, and reference bindings into the
+    descriptive prompt `t2i` / `i2i` expect. Returns `final_prompt`,
+    passthrough `reference_paths`, and i2i path hints.
+
+  ## Canonical chains
+  These are planning skeletons, not rigid routes. Insert `format_prompt`
+  whenever accumulated context (facts, reasoning, layout description,
+  reference bindings, or text-template preservation instructions) would be
+  clearer as one downstream image prompt.
+
+  - Spatial / counting:        `code_scene_draft → i2i`
+    or `code_scene_draft → format_prompt → i2i` when the draft's
+    `svg_description` / layout intent should be translated into a stronger
+    preservation prompt for i2i.
+  - Reference-grounded entity: `search → format_prompt → i2i`.
+    Use this path whenever search returns multiple `reference_paths`, the
+    request used multiple image_queries, or the scene must bind multiple
+    grounded visual entities. In that case `format_prompt` should preserve
+    each reference's role and tell i2i which image is the main canvas and which
+    paths are extra references.
+    For transformed physical-form requests, plan references by role:
+    direct form reference first (plush toy, keychain, figurine, sticker,
+    package, cake, sculpture, costume, accessory, etc.), identity reference
+    second (face/outfit/logo/shape), and anchor/product/scene reference as
+    needed. Do not satisfy a plush/keychain/figurine request with only a flat
+    character sheet or illustration unless no direct form reference exists.
+    Direct `search → i2i` is only for the narrow case where search returns
+    exactly one visual reference and there are no facts / multi-reference
+    bindings to fuse.
+  - Scientific / logical visual derivation: `reason → t2i`
+    or `reason → format_prompt → t2i` when the reasoning_output is long,
+    technical, or needs to be converted into vivid visual language.
+  - World-knowledge long text rendering:
+    `search → code_text_draft` when the main job is to resolve a public /
+    factual long text and render it readably. If the result then needs a more
+    polished or photographic finish, continue as
+    `search → code_text_draft → format_prompt → i2i`; format_prompt should
+    summarize style/restyle constraints and preserve the rendered text
+    template, not repeat the full long text.
+  - Embedded text naturalization:
+    `code_text_draft(embedded_svg) → format_prompt → i2i`
+    Use when code_text_draft produced an embedded text scene where the text is
+    on local carriers such as exhibit labels, plaques, speech bubbles, signs,
+    tags, or panels. Treat the code_text_draft result as a structural/text
+    reference, not as a rigid final template. `format_prompt` should ask i2i to
+    preserve the exact text strings and their object association, but naturalize
+    carrier size, perspective, materials, and proportions so the result looks
+    like a real scene, not oversized blueprint text boxes.
+  - If `search` returns `reference_paths=[]`, fall back to `t2i` with a rich
+    descriptive prompt — never invent an `i2i.image_path`.
+
+  ## Boundaries
+  - Never return a raw `code_scene_draft` draft as the final image.
+  - Do not use `code_text_draft` for pure spatial geometry with no readable
+    text; use `code_scene_draft` instead.
+  - Do not force `code_text_draft` for short incidental text or tiny labels
+    when ordinary `t2i` / `i2i` can plausibly handle it.
+  - If the user supplied an input image and the task is to edit, restyle, or
+    annotate that image, use `i2i` directly with the real user_image_path.
+    Do not route through `code_scene_draft` or `code_text_draft` unless the
+    task specifically requires a new exact layout draft or a new long-text
+    template.
+  - If restyling a `code_text_draft` output with `i2i`, the image path MUST be
+    the actual `code_text_draft.final_path` from the previous tool result.
+  - If `format_prompt` returns multiple reference_paths, keep their order.
+    For i2i use `i2i_image_path_hint` when present; otherwise use
+    `reference_paths[0]` as image_path and pass remaining paths via
+    `i2i.reference_image_paths`.
+  - If `vlm_review` asks for a retry, check `repair_strategy`:
+    `edit_previous` means the prior generated image is a good canvas and can be
+    used as the next `i2i.image_path`; `regenerate_from_source` means the prior
+    generated image has a global composition/canvas failure, so go back to the
+    upstream `format_prompt` source hints instead of feeding the failed image
+    back into i2i.
+
+  Note: the current todo list is auto-injected each turn via a
+  `<system-reminder>`, so it stays visible across long conversations.
+
+examples:
+  - |
+    <example>
+    User: 桌子中间三个红色苹果，两个绿色香蕉，桌子旁边是一个自行车。
+    Assistant: *Creates todo list with the spatial-control pipeline:*
+    1. Draft the exact object layout via code_scene_draft
+    2. Refine the draft into a natural image via i2i
+    *Starts with code_scene_draft.*
+    <reasoning>
+    The hard part is exact composition: 3 red apples in the table center,
+    2 green bananas, and a bicycle beside the table. code_scene_draft locks
+    the count and placement first; i2i then turns the draft into a richer
+    visual image using the real draft_png_path.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: 绘制一个 labubu 坐在小米 YU7 GT 的车顶上。
+    Assistant: *Creates todo list with the reference-grounded pipeline:*
+    1. Search for Labubu and Xiaomi YU7 GT facts / reference images
+    2. Fuse the facts and references into an i2i prompt via format_prompt
+    3. Render the final image via i2i using a real reference path
+    *Starts with search.*
+    <reasoning>
+    Both Labubu and Xiaomi YU7 GT are named visual entities. Search supplies
+    facts and curated reference_paths; format_prompt is useful because the
+    final prompt must blend two entities and their spatial relation before
+    i2i uses an actual reference image path.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: Generate an image of the process where potassium permanganate
+    granules fall into water and dissolve.
+    Assistant: *Creates todo list with the reasoning-to-image pipeline:*
+    1. Reason about the visible chemistry of potassium permanganate dissolving
+    2. Generate the process image via t2i using the reasoning conclusions
+    *Starts with reason.*
+    <reasoning>
+    This is textbook scientific visual grounding, not a reference-image task.
+    reason should derive the important visible details: KMnO4 produces a deep
+    purple / magenta color, and the process should show streaks, plumes, and
+    swirls as granules dissolve rather than a uniform purple liquid. t2i then
+    uses those conclusions directly.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: 生成一张方形《滕王阁序》全文海报：水墨滕王阁江景背景，
+    宣纸质感；标题“滕王阁序”，署名“唐·王勃”；正文为《滕王阁序》
+    完整全文，中文竖排多栏，所有汉字必须清晰可读。
+    Assistant: *Creates todo list with the world-knowledge long-text pipeline:*
+    1. Search for and verify the full text of Tengwang Ge Xu
+    2. Render the square poster via code_text_draft with the resolved text
+    3. Optionally restyle via i2i using code_text_draft.final_path if a more
+       polished background / material finish is needed
+    *Starts with search.*
+    <reasoning>
+    The long text is not fully supplied by the user, so search resolves the
+    exact source text first. Once the text is known, code_text_draft owns the
+    readable vertical Chinese poster rendering; its internal renderer may
+    choose the appropriate HTML/background pipeline.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: 设计一份摊开在桌面的中餐厅精装菜单，宣纸底色配赭石红朱砂边框，
+    整体古朴典雅。顶部标题「蜀香苑·龍鳳呈祥酒樓」。菜单分左右两栏，
+    每栏五道菜。左栏：犇羴鱻三鮮鍋 ¥168、饕餮宴拼盤 ¥288、
+    黄芪当歸燉烏雞 ¥98、靈芝枸杞燉湯 ¥88。右栏：麻婆豆腐 ¥32、
+    水煮鱼 ¥68、宫保雞丁 ¥42、回鍋肉 ¥45、魚香肉絲 ¥38
+    Assistant: *Creates todo list with the text-template restyle pipeline:*
+    1. Render a clean readable menu template via code_text_draft
+    2. Fuse restyle instructions via format_prompt
+    3. Restyle the template via i2i using code_text_draft.final_path
+    *Starts with code_text_draft.*
+    <reasoning>
+    The exact Chinese strings are the invariant, so code_text_draft first
+    produces a readable template. If the user also asks for an elegant
+    table-top product-shot look, i2i may restyle that template; the i2i
+    image_path must be the actual code_text_draft.final_path, never a guessed
+    file path.
+    </reasoning>
+    </example>
