@@ -1,0 +1,62 @@
+name: code_text_draft
+description: Render exact literal text into an image or text/structure reference (menus, scoreboards, posters, multi-line quotes, web UI, local labels). pure_code/layered outputs are often final; embedded_svg outputs must be naturalized via format_prompt → i2i.
+
+what: |
+  Use HTML/CSS rendering through a headless browser (internal sub-pipelines:
+  pure_code / layered / embedded) to produce an image where one or more
+  verbatim text strings appear exactly as given.
+  
+  Unlike code_scene_draft, which is designed for geometry-driven spatial 
+  arrangements (multi-object spatial compositions), code_text_draft is 
+  exclusively tailored for text-driven rendering tasks where precise spellings,
+  custom layouts, and high-readability typography are paramount.
+  
+  The returned final_path is often the deliverable for pure_code/layered.
+  If render_type is embedded_svg, final_path is a text/structure reference
+  image, not the final natural image. Follow next_step_hint: call format_prompt
+  with final_path as text_template_path, then call i2i using format_prompt's
+  i2i_image_path_hint and final_prompt.
+
+when_to_use: |
+  Use when the task requires rendering precise, readable, literal text and the text is a primary subject of the image. Typical use cases:
+  - Long text rendering (such as multi-line quotes, poetry, structured paragraphs).
+  - Restaurant menus (e.g., dish names, prices, descriptions in custom grids).
+  - Posters and banners (e.g., event posters with exact titles, dates, or slogans).
+  - UI mockups, HTML rendering, certificates, or cards.
+  - Subtitles, captions, or simple danmaku/bullet-comment overlays where the background scene and text overlay can be separated.
+  - A small number of large, front-facing flat labels/signs/panels where character-perfect text is more important than fine photorealistic surface detail.
+  
+  Note: All target text strings must be fully known and resolved at call time (e.g., after necessary web searches).
+
+when_not_to_use: |
+  - The task is primarily image-to-image editing of an existing user-supplied image with no long verbatim text requirement → use i2i directly.
+  - Simple scene with no literal text → use t2i instead.
+  - Multi-object spatial and geometric arrangement with no readable text → use code_scene_draft instead.
+  - Very short labels of 1-2 words (e.g., "OPEN") that standard text-to-image (t2i) models can render reliably without complex pipeline overhead.
+  - Dense real-world scenes where text is only a small detail repeated across many objects (tea jars on shelves, chemical bottles, grocery labels, cosmetic containers, product packaging) → prefer t2i/direct generation unless the user explicitly asks for one large front-facing label to be exact.
+  - Text on curved/cylindrical/deformable/perspective-heavy surfaces where a flat HTML/SVG text carrier would look pasted on → prefer t2i/direct generation.
+
+usage: |
+  Required args:
+    prompt: str — overall image description (style, mood, background scene).
+    expected_long_texts: List[str] — verbatim strings that MUST appear character-perfectly in the rendered image.
+  
+  Optional:
+    category: '' | 'menu' | 'scoreboard' | 'poster' | 'sign' (default '') — biases the internal router.
+    gen_backend: 'gemini' (default) | 'qwen'
+  
+  Output (JSON):
+    final_path: str — absolute path. For pure_code/layered this is the final
+      image; for embedded_svg this is a text/structure reference image.
+    render_type: 'pure_code' | 'layered' | 'embedded_svg'
+    expected_texts_used: List[str]
+    output_role: 'final_image' | 'text_structure_reference'
+    requires_i2i: bool — true for embedded_svg references.
+    next_step_hint: object — present for embedded_svg; tells the agent to use
+      format_prompt and then i2i.
+    status: 'success' | 'failed'
+
+failure_modes:
+  - 'Missing expected_long_texts: if no text needs verbatim rendering, fallback to t2i.'
+  - 'Status failed: the underlying rendering engine failed. Try switching gen_backend to "qwen" or "gemini".'
+  - 'Text garbled or spelling distorted: try a different category hint or refine the background description.'

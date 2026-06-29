@@ -1,0 +1,266 @@
+name: vlm_review
+description: Review a final generated image against the original user request and any upstream tool context, and return structured fix instructions that can drive at most a few bounded i2i retries.
+short_description: Vision-based reviewer for final images; checks hard constraints (counts, colors, layout, readable text, identity / reference match) and returns a suggested i2i fix prompt.
+
+what: |
+  Use this tool to inspect a FINAL generated image with a vision model. It is
+  a checker, not a generator. It judges whether the image satisfies the hard
+  constraints expressed in the original user request and resolved by upstream
+  tools (search / reason / code_scene_draft / code_text_draft / etc.), and
+  produces actionable feedback for one bounded i2i retry.
+
+  vlm_review is a general final-image reviewer for the image agent. It is NOT
+  tied to a single task class. The examples below are
+  illustrative, not exhaustive: any task with at least one objectively
+  verifiable hard constraint is a valid review target.
+
+  Things it can check (non-exhaustive):
+
+  - exact object counts, required objects present, colors
+  - spatial relations (left / right / top / center / grid)
+  - relative size constraints
+  - preservation of a structural draft when code_scene_draft was used
+  - readable text fidelity when long text was rendered (e.g. via code_text_draft)
+  - identity / reference fidelity when search supplied named-entity references
+    or named-IP descriptive facts (e.g. logo shape, signature colors, costume
+    details, product model, era, brand mark, slogan). When reference images are
+    passed, vlm_review attaches them visually after the final image as
+    Reference A/B/C and compares according to their intended roles.
+  - scientific or geometric constraints resolved by reason
+
+  The result is strict JSON. The most important fields for recovery are
+  suggested_fix_prompt and repair_strategy, which together decide whether the
+  next i2i should edit the previous result or regenerate from the original
+  source/reference images.
+
+when_to_use: |
+  Use after t2i, i2i, or code_text_draft whenever you have a candidate FINAL
+  image and the task has at least one hard, verifiable constraint. The trigger
+  is "the task has constraints worth checking", not "the task belongs to a
+  pre-listed category". The categories below are guidance, not a whitelist.
+
+  Strong triggers (call vlm_review unless the user opted out):
+
+  - The original prompt contains exact counts, exact colors, explicit
+    positions, grids, relative sizes, or other strict layout language.
+  - code_scene_draft was used: the final image MUST preserve the draft layout.
+  - code_text_draft was used and a downstream restyle (i2i) was applied: the
+    readable text MUST survive the restyle.
+
+  Generic triggers:
+
+  - Multi-entity world-knowledge requests: two or more named entities / IPs /
+    products / characters must coexist in one image. Multi-IP layouts are
+    error-prone, so review the final image against the original prompt plus
+    any search facts / reference images.
+  - Stacked constraints: the original prompt combines THREE or more hard
+    constraint dimensions (e.g. count + color + readable text, or identity +
+    spatial layout + product model). The more stacked constraints, the more
+    important the review.
+  - Constraint resolved by upstream tools: search has summarized
+    distinguishing facts about a named IP, OR reason has produced a factual /
+    geometric conclusion. In that case the final image must match those
+    upstream facts, not just the bare user prompt.
+  - User asks to "check / verify / make sure / confirm" something about the
+    image, or asks for a high-fidelity / accurate result.
+  - The first t2i / i2i result is the kind of output where a one-shot
+    generation is unlikely to satisfy every constraint and a small bounded
+    repair is cheap.
+
+  When in doubt and a hard constraint exists, prefer calling vlm_review once
+  rather than declaring done blindly.
+
+when_not_to_use: |
+  - Do not use as an aesthetic preference judge ("is it pretty?") when the
+    task has no hard constraint.
+  - Do not use on code_scene_draft drafts as the main structural reviewer;
+    code_scene_draft already self-reviews its draft.
+  - Do not loop unboundedly. A bounded number of reviews per task (typically
+    one after the first final image, plus one after each repair) is enough;
+    further repairs should be gated by user confirmation.
+
+usage: |
+  Required:
+    image_path: absolute path to the final image to review.
+    original_user_prompt: the original user request; primary source of truth.
+
+  Optional:
+    criteria: list of strings naming what to check. Common values:
+      - exact_count
+      - object_presence
+      - color_fidelity
+      - spatial_relation
+      - relative_size
+      - draft_preservation        (when a code_scene_draft draft was used)
+      - text_fidelity             (when readable long text must be preserved)
+      - identity_preservation     (when a named entity / reference subject
+                                   must remain recognizable)
+      - reference_match           (when search supplied a reference image to
+                                   match in shape / color / product design)
+      - scientific_accuracy       (when reason produced a factual / geometric
+                                   conclusion the image must reflect)
+    draft_png_path: absolute code_scene_draft image path, if used.
+    svg_description: layout JSON / string from code_scene_draft.
+    expected_texts: list of strings; literal text that must remain readable
+      (typically code_text_draft.expected_texts_used).
+    source_render_type: optional upstream source marker, for example
+      code_text_draft:pure_code, code_text_draft:layered,
+      code_text_draft:embedded_svg, or code_scene_draft:i2i. Use this when
+      the reviewer should distinguish final HTML text from an embedded text
+      draft that was refined by i2i.
+    reference_image_paths: list of absolute paths used as visual anchors
+      (typically search.reference_paths). These images are attached for visual
+      comparison as Reference A/B/C after the final image.
+    search_facts_summary: free-text summary of distinguishing facts about
+      named entities / IPs / products derived from search (e.g. logo shape,
+      signature colors, costume / outfit details, product model, era,
+      brand slogan). Use this when the user asks for a specific real-world
+      subject and the visual identity is described in words, not (only) in
+      a reference image.
+    reasoning_conclusions: list of strings; key conclusions from reason that
+      the image must agree with.
+    max_issues: default 6.
+
+  Output JSON:
+    status: "success" | "failed"
+    passed: boolean
+    verdict: "PASS" | "NEEDS_FIX" | "FAIL"
+    issues: list of structured issues
+    suggested_fix_prompt: prompt for one i2i retry, if useful
+    repair_strategy: "none" | "edit_previous" | "regenerate_from_source"
+    should_retry: boolean
+
+failure_modes:
+  - image_path missing, relative, or nonexistent -> status=failed.
+  - VLM provider / API failure -> status=failed with error.
+  - JSON parse failure from reviewer -> status=failed with error.
+
+cross_tool: |
+  General role: vlm_review is the final-image QA step for any task class
+  whose deliverable is a single image with verifiable hard constraints. It
+  consumes the original user prompt plus whatever upstream context the agent
+  has already produced, and returns either PASS or one concrete fix prompt
+  for i2i.
+
+  - Precise rendering pipeline:
+      code_scene_draft -> format_prompt -> i2i -> vlm_review
+      pass criteria: exact_count, object_presence, color_fidelity,
+      spatial_relation, relative_size, draft_preservation.
+
+  - Long-text pipeline:
+      code_text_draft (final) -> (optional format_prompt -> i2i restyle) ->
+      vlm_review
+      pass criteria: text_fidelity (verbatim readable text + layout), plus
+      any extra style constraint that the restyle was supposed to add.
+      If render_type is embedded_svg, pass
+      source_render_type: code_text_draft:embedded_svg and also check that
+      local labels / plaques / bubbles are naturally proportioned in the
+      final scene rather than preserved as oversized blueprint panels.
+
+  - World-knowledge / reference pipeline:
+      search -> (format_prompt) -> i2i -> vlm_review
+      pass criteria: identity_preservation, reference_match, plus any spatial
+      or color constraint named in the original prompt. Pass BOTH
+      reference_image_paths AND search_facts_summary when search produced
+      them, so the reviewer can use described facts (e.g. signature colors,
+      logo shape, product model) in addition to visual anchors. Multi-entity
+      requests in particular benefit from search_facts_summary because each
+      entity then has its own checkable description. For object/product/place
+      references, reference_match should compare distinctive visible structure:
+      silhouette, proportions, material, surface layout, major components,
+      attachment points, logos/marks when relevant, colors, and relative
+      placement of distinctive parts. A generic similar object is not enough if
+      the reference structure is visibly different.
+
+  - Reasoning-driven pipeline:
+      reason -> (format_prompt) -> t2i / i2i -> vlm_review
+      pass criteria: scientific_accuracy, plus any visual constraint stated
+      in the original prompt.
+
+  Repair handling:
+  - If should_retry is true, suggested_fix_prompt is non-empty, and
+    repair_strategy is "edit_previous", call i2i once more using the previous
+    i2i.final_path as image_path (NOT a draft path). Use this only for local
+    edits where the current image is already a good canvas.
+  - If repair_strategy is "regenerate_from_source", do NOT use the failed
+    generated image as the next i2i.image_path. Reuse the upstream
+    format_prompt result if available: i2i_image_path_hint as image_path,
+    i2i_extra_reference_paths_hint as reference_image_paths, and combine the
+    original final_prompt with suggested_fix_prompt. This is for global
+    failures such as split-screen / stacked panels / collage, duplicated main
+    scene, wrong canvas or aspect ratio, missing primary subject, or object
+    relationships distributed across separate panels.
+  - After the repair, call vlm_review again on the new final_path.
+  - You MAY allow up to a small default number of repairs (e.g. 2). After
+    that, stop, deliver the current best image, surface remaining issues,
+    and ask the user before continuing.
+
+examples:
+  # The following examples illustrate four common shapes of vlm_review calls.
+  # They are NOT an exhaustive list of valid use cases. Any task with at least
+  # one objectively verifiable hard constraint is a valid review target — see
+  # `when_to_use` for the generic triggers.
+  - |
+    <example>
+    Precise rendering check (counts + colors):
+      vlm_review({
+        "image_path": "/abs/runs/image_gen/gen.png",
+        "original_user_prompt": "Render seven blue ceramic cups in a straight row.",
+        "criteria": ["exact_count", "color_fidelity", "object_presence"]
+      })
+    <reasoning>
+    Hard constraints are count (seven) and color (blue). If fewer cups are
+    visible or the color is wrong, use suggested_fix_prompt for an i2i repair.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    Long-text fidelity check after code_text_draft:
+      vlm_review({
+        "image_path": "/abs/runs/code_text_draft/final.png",
+        "original_user_prompt": "Create a poster of the full Shakespeare sonnet 18 on aged parchment.",
+        "expected_texts": ["<exact sonnet text rendered into the template>"],
+        "source_render_type": "code_text_draft:layered",
+        "criteria": ["text_fidelity", "object_presence"]
+      })
+    <reasoning>
+    The deliverable is a long-text poster. Check that every line is legible,
+    that no characters are corrupted, and that the parchment layout was kept.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    World-knowledge multi-entity check with reference images AND search facts:
+      vlm_review({
+        "image_path": "/abs/runs/image_gen/gen.png",
+        "original_user_prompt": "Draw Conan holding an iPhone 17 next to Doraemon.",
+        "reference_image_paths": [
+          "/abs/search/conan.png",
+          "/abs/search/iphone17.png",
+          "/abs/search/doraemon.png"
+        ],
+        "search_facts_summary": "Conan: schoolboy with messy black hair, blue jacket, round glasses, red bowtie. iPhone 17: modern flat-edge smartphone with triple camera array. Doraemon: round blue robotic cat with red collar and yellow bell, white belly, no ears.",
+        "criteria": ["identity_preservation", "reference_match", "object_presence"]
+      })
+    <reasoning>
+    Multi-entity IP requests are high-difficulty: every entity must remain
+    recognizable. The reviewer gets both visual anchors and per-entity
+    descriptive facts so it can localize identity drift to a specific
+    character or product, and suggested_fix_prompt can target only the
+    drifted entity.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    Reasoning-driven scientific check:
+      vlm_review({
+        "image_path": "/abs/runs/image_gen/gen.png",
+        "original_user_prompt": "Draw the structure of the caffeine molecule.",
+        "reasoning_conclusions": ["Caffeine has a fused purine ring with three methyl substituents at N1, N3, and N7."],
+        "criteria": ["scientific_accuracy", "object_presence"]
+      })
+    <reasoning>
+    The image must match the molecular structure derived by reason. The check
+    focuses on ring fusion and the three methyl positions, not on art style.
+    </reasoning>
+    </example>

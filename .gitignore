@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS / macOS
+.DS_Store
+._*
+
+# Secrets: never commit real API keys. Commit config.example.yaml instead.
+.env
+config.yaml
+
+# Runtime / generated artifacts
+runs/
+outputs/
+temp/
+.files/
+*.log
+
+# Chainlit runtime state
+.chainlit/translations/
+.chainlit/.langchain.db
+.files/
+
+# Test / coverage
+.coverage
+.pytest_cache/
+htmlcov/

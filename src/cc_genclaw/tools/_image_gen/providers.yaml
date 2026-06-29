@@ -1,0 +1,31 @@
+# Image generation backends for the t2i / i2i atomic tools.
+# This file declares image-gen providers without storing secrets.
+# Credentials are resolved from environment variables populated by config.yaml.
+#
+# Switch backend  -> change the `default` line below or set
+#                    CC_GENCLAW_IMAGE_PROVIDER.
+# Add a backend   -> add one entry under `providers`.
+# No .py change is ever required for either.
+#
+# Each provider entry:
+#   protocol : openai | openai_chat
+#   model    : used for both T2I and I2I when the same model serves both
+#   t2i_model / i2i_model : override per-direction (takes priority over `model`)
+#
+#   openai needs:      base_url, api_key   (images.generate / images.edit)
+#   openai_chat needs: base_url, api_key   (chat/completions w/ inline image)
+#
+# Values like ${OPENAI_API_KEY} are resolved at runtime from os.environ.
+
+default: gemini_openai
+
+providers:
+
+  # Gemini image model exposed over an OpenAI-compatible chat endpoint.
+  # By default it reuses the single main gateway (OPENAI_BASE_URL / API_KEY);
+  # set GEMINI_BASE_URL / GEMINI_API_KEY only to override with a separate one.
+  gemini_openai:
+    protocol: openai_chat
+    base_url: ${GEMINI_BASE_URL}
+    api_key: ${GEMINI_API_KEY}
+    model: ${GEMINI_I2I_MODEL_NAME}

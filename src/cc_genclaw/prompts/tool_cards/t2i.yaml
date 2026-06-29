@@ -1,0 +1,27 @@
+name: t2i
+description: Generate a new image from a text prompt. Returns the absolute path of the generated PNG.
+
+what: |
+  Produce a brand-new image purely from a text description. No input
+  image is consumed; the prompt is the only source of content.
+
+when_to_use: |
+  When the desired output is a new image and there is no existing image
+  to build on.
+
+when_not_to_use: |
+  When there is already an image to transform, refine, restyle, or edit —
+  that case needs an image input, not pure text-to-image.
+
+usage: |
+  Input:
+    prompt (string, required): text description of the image.
+    quality (string, optional): reserved, currently no effect.
+
+  Output (JSON in tool_result.content):
+    status: "success" | "failed"
+    final_path: absolute path to the generated PNG (on success)
+    error: error message (on failed)
+
+failure_modes:
+- Provider API failed on all attempts (1 original + 3 retries, 5s/15s/45s backoff) → status=failed, error contains the underlying exception.

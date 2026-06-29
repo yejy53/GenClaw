@@ -1,0 +1,63 @@
+name: reason
+description: "General-purpose LLM reasoning. Call when the user's request is not directly paintable as-is and needs prior thinking, derivation, decomposition, or interpretation before any image tool can act."
+
+what: |
+  Call an LLM to reason over the prompt plus optional images. Internally
+  it runs an explicit chain-of-thought (CoT) pass — an adaptive
+  multi-step loop (perceive the inputs → pick a reasoning strategy →
+  solve step by step → self-audit the answer) — and returns
+  reasoning_output: a list of plain-text conclusions that carry the
+  derivation, not just a bare final value. There are no modes — just
+  describe what you want thought through in the prompt.
+
+  Because the answer quality depends on that CoT actually unfolding, do
+  NOT instruct it to "return only the answer / just the letter": ask for
+  the conclusion **with its derivation** (e.g. "show the angle
+  derivation and then give the measure + option letter").
+
+when_to_use: |
+  Call `reason` whenever the user's request is **not directly paintable
+  as-is** — that is, it first needs some kind of thinking, derivation,
+  decomposition, or interpretation before any image tool can act on a
+  concrete description. This is deliberately broad: any task worth
+  reasoning about qualifies, not just a fixed list of categories.
+
+  Illustrative (non-exhaustive) triggers:
+  - A multi-hop fact chain that `search` cannot answer in one shot —
+    reason it into independent sub-questions first.
+  - Math / geometry / physics / chemistry derivations the image model
+    cannot reliably do — compute the structural numbers (coordinates,
+    proportions, ratios) before any draft tool.
+  - A weak or off-topic first `search` — reason about better queries to
+    rewrite them.
+  - The user attached an image that must be interpreted (a geometry
+    figure, a map, a labelled diagram) — pass user_image_path so the
+    sub-LLM can reason multi-modally.
+  - The model probably already knows the answer and an external search
+    would be overkill — fast textbook recall.
+
+  When you see a request that needs *any* form of pre-image-tool thinking,
+  default to `reason` rather than calling an image tool with an
+  under-specified prompt.
+
+when_not_to_use: |
+  - The user has given a paintable scene with no inference required → go straight to t2i / code_text_draft / code_scene_draft.
+  - The request needs real-world fresh facts (live scores, today's news, a specific identified person's current state) → go to `search` directly; `reason` only invents from training data.
+  - `state.reasoning_output` already covers what the current sub-task needs → reuse it instead of calling reason again.
+
+usage: |
+  Required args:
+    prompt: str — the reasoning question
+
+  Optional:
+    reference_image_paths: List[str] — multi-modal grounding
+    user_image_path: str — multi-modal user input
+
+  Output (JSON):
+    reasoning_output: List[str] — the reasoning conclusions
+    status: 'success' | 'failed'
+
+failure_modes:
+  - 'reasoning_output=[] → underlying LLM failed or returned non-JSON. Inspect content.status and retry with a clearer, more specific prompt.'
+  - 'The answer drifted from the question → make the prompt state the exact conclusion you need (e.g. "list each vertex as (x, y) to two decimals").'
+  - 'Wrong final value despite an easy problem → the prompt likely asked for the answer ONLY and suppressed the CoT. Re-call asking for the step-by-step derivation first, then the final value.'

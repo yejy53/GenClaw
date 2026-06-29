@@ -1,0 +1,87 @@
+name: tool_search
+description: Search for and load deferred tools by keyword or exact name.
+
+what: |
+  Looks up tools that have been marked as "deferred" — only their short
+  summaries are sent in the initial tool list to save tokens. Calling this
+  tool reveals their full 7-section description and (from the next turn
+  onward) the model receives their full schema by default.
+
+when_to_use:
+  - You see a tool referenced in the short tool list whose summary mentions
+    "DEFERRED" or "Call tool_search to load full usage rules"
+  - You need to use a tool whose name you recognize but whose detailed
+    parameters / failure modes / cross-tool rules are not visible
+  - You want to enumerate available deferred tools by topic
+    (e.g. query="shell" or query="git")
+
+when_not_to_use:
+  - The tool you want is already fully described in the initial tool list
+    (most tools are NOT deferred — only specific heavy-prompt or low-frequency
+    tools are; trying to "search" them is wasteful)
+  - You already called tool_search for this tool earlier in the session;
+    the description is already in your view from the next turn onward
+  - As a way to discover what a tool does — read its description directly
+    if it's already visible
+
+usage: |
+  - `query` accepts two forms:
+    1. `select:<ToolName>` — exact match (e.g. `select:bash`)
+    2. any other string — case-insensitive substring search across
+       (tool name + short summary + first paragraph of full description)
+  - `max_results` caps the number of hits (default 5)
+  - Side effect: matched tools are marked "discovered" for the rest of the
+    session. The next LLM call will receive their full schema description
+    automatically. You do NOT need to call tool_search again for the same tool.
+  - The tool's full description is also returned inline so you can act on
+    it immediately within the same turn.
+
+failure_modes:
+  - 'Empty result — verify the query keyword; try the exact name with select:'
+  - 'No deferred tools available — every deferred tool already discovered, or none registered'
+  - 'select:NAME not found — surface lists the actual deferred tool names; try one of those'
+
+cross_tool:
+  - tool_search is NEVER deferred itself — it's always available
+  - After calling tool_search, you do NOT need to "re-import" the tool;
+    just call it normally on the next turn (or this turn, since the inline
+    description is already in your view)
+
+examples:
+  - |
+    <example>
+    User: run `echo hello` to verify shell access.
+    Assistant: I see `bash` listed but its full usage rules are deferred.
+    Let me load them first.
+    tool_search({"query": "select:bash"})
+    [tool result returns full bash 7-section description]
+    bash({"command": "echo hello"})
+    <reasoning>
+    Bash is deferred (its short_description says so). Calling tool_search
+    with select:bash loads the full rules (timeout, dedicated-tool precedence,
+    git protocol etc) so I follow them when calling bash. The discovery is
+    permanent for this session, so subsequent bash calls don't need a
+    second tool_search.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: I need to do something with git.
+    Assistant: tool_search({"query": "git"})
+    [tool result lists 0 or more deferred tools whose short_description
+    mentions git, e.g. bash]
+    <reasoning>
+    Keyword search across deferred tools. If bash's short_description
+    mentions git, it'll be returned and discovered. If no deferred tools
+    match, the model just uses whatever is already eager.
+    </reasoning>
+    </example>
+  - |
+    <example>
+    User: read /tmp/foo.txt.
+    Assistant: read_file({"file_path": "/tmp/foo.txt"})
+    <reasoning>
+    NOT tool_search. read_file is eager (always full description visible).
+    Don't waste a turn searching for tools that are already fully described.
+    </reasoning>
+    </example>
