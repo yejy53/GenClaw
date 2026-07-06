@@ -12,6 +12,11 @@ The core idea is simple: **think, sketch with code, then render**.
   <img src="assets/teaser.jpg" width="95%">
 </p>
 
+## News
+
+- **[2026-05-30]** 🎉 GenClaw released — technical report and project page.
+- **[2026-06-29]** 🚀 Released a runnable agent implementation, with updated code for **complex scene composition**, **text rendering**, and **world-knowledge-grounded generation**.
+
 ## Highlights
 
 🎨 **Code as a Visual Brush.** The agent creates by writing executable visual sketches—SVG, HTML/CSS, Python, lightweight 3D code—turning object count, spatial layout, and text rendering into executable, verifiable, debuggable programs. Image synthesis shifts from implicit diffusion sampling to an explicit, reasoning-friendly process.
