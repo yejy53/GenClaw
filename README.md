@@ -8,9 +8,7 @@ GenClaw explores **code-driven agentic image generation**: instead of only rewri
 
 The core idea is simple: **think, sketch with code, then render**.
 
-<p align="center">
-  <img src="assets/teaser.jpg" width="95%">
-</p>
+https://github.com/user-attachments/assets/786007a9-6a2e-427d-88fa-506d608e925e
 
 ## News
 
@@ -192,3 +190,4 @@ If you find GenClaw useful, please consider citing our technical report:
 ## License
 
 [MIT](LICENSE)
+
