@@ -11,9 +11,10 @@ The core idea is simple: **think, sketch with code, then render**.
 https://github.com/user-attachments/assets/786007a9-6a2e-427d-88fa-506d608e925e
 
 ## News
-
-- **[2026-05-30]** 🎉 GenClaw released — technical report and project page.
+- **[2026-08-28]** 🎉 Editable visual design！https://github.com/yejy53/Editable-Design.
 - **[2026-06-29]** 🚀 Released a runnable agent implementation, with updated code for **complex scene composition**, **text rendering**, and **world-knowledge-grounded generation**.
+- **[2026-05-30]** 🎉 GenClaw released — technical report and project page.
+
 
 ## Highlights
 
